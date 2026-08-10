@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>VALORANT - FPS WebGL</title>
+    
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js Core & Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@r128/examples/js/controls/PointerLockControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@r128/examples/js/loaders/GLTFLoader.js"></script>
+    
+    <!-- NippleJS for Virtual Joystick -->
+    <script src="https://yoannimmo.github.io/nipplejs/nipplejs.js"></script>
+    
+    <!-- Custom Styles -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: #0a0e27;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* HUD Overlay */
+        #hud-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        }
+
+        .hud-element {
+            pointer-events: auto;
+            user-select: none;
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            border: 2px solid #00ff00;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
+        }
+
+        /* Health & Armor Bar */
+        #health-bar {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 200px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .health-value {
+            width: 100%;
+            height: 20px;
+            background: #001a00;
+            border-radius: 3px;
+            margin-bottom: 5px;
+            overflow: hidden;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #00aa00);
+            width: 100%;
+            transition: width 0.2s;
+        }
+
+        .armor-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00aaff, #0055ff);
+        }
+
+        /* Weapon Info */
+        #weapon-info {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            text-align: right;
+            font-size: 24px;
+            color: #00ff00;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        }
+
+        .ammo-counter {
+            font-size: 36px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        /* Shop Menu */
+        #shop-menu {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            pointer-events: auto;
+        }
+
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            width: 90%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+
+        .weapon-card {
+            background: rgba(0, 255, 0, 0.1);
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .weapon-card:hover {
+            background: rgba(0, 255, 0, 0.2);
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
+        }
+
+        .weapon-card.locked {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Virtual Joysticks */
+        .nipple {
+            pointer-events: auto;
+        }
+
+        /* Mobile Touch Button */
+        #shoot-btn, #aim-btn, #ability-btn {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(0, 255, 0, 0.2);
+            border: 3px solid #00ff00;
+            color: #00ff00;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            transition: all 0.1s;
+            z-index: 100;
+        }
+
+        #shoot-btn:active {
+            background: rgba(255, 0, 0, 0.4);
+            border-color: #ff0000;
+        }
+
+        #aim-btn:active {
+            background: rgba(0, 100, 255, 0.4);
+            border-color: #0064ff;
+        }
+
+        #ability-btn:active {
+            background: rgba(255, 100, 0, 0.4);
+            border-color: #ff6400;
+        }
+
+        #shoot-btn {
+            bottom: 40px;
+            right: 40px;
+        }
+
+        #aim-btn {
+            bottom: 40px;
+            right: 140px;
+        }
+
+        #ability-btn {
+            bottom: 140px;
+            right: 40px;
+        }
+
+        /* FPS Counter */
+        #fps-counter {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #00ff00;
+            font-family: monospace;
+        }
+
+        /* Notification */
+        .damage-number {
+            position: absolute;
+            font-weight: bold;
+            color: #ff0000;
+            text-shadow: 0 0 5px rgba(255, 0, 0, 0.8);
+            pointer-events: none;
+            animation: float-up 1s ease-out forwards;
+        }
+
+        @keyframes float-up {
+            0% {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-50px) scale(0.8);
+                opacity: 0;
+            }
+        }
+
+        /* Buy Phase UI */
+        #buy-phase {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff00;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            color: #00ff00;
+            min-width: 250px;
+        }
+
+        .credit-display {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- 3D Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD Container -->
+    <div id="hud-container">
+        <!-- Crosshair -->
+        <div id="crosshair"></div>
+
+        <!-- FPS Counter -->
+        <div id="fps-counter">FPS: 0 | PING: 0ms</div>
+
+        <!-- Buy Phase -->
+        <div id="buy-phase" style="display:none;">
+            <div>BUY PHASE</div>
+            <div class="credit-display">💰 <span id="credits-display">800</span></div>
+            <button id="open-shop-btn" class="mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white">
+                SHOP
+            </button>
+        </div>
+
+        <!-- Health & Armor -->
+        <div id="health-bar">
+            <div style="font-size: 12px; margin-bottom: 5px;">HP: <span id="health-text">100</span>/100</div>
+            <div class="health-value">
+                <div class="health-fill" id="health-fill"></div>
+            </div>
+            <div style="font-size: 12px;">ARMOR: <span id="armor-text">0</span>/100</div>
+            <div class="health-value">
+                <div class="armor-fill" id="armor-fill"></div>
+            </div>
+        </div>
+
+        <!-- Weapon Info -->
+        <div id="weapon-info">
+            <div id="weapon-name">CLASSIC PISTOL</div>
+            <div class="ammo-counter">
+                <span id="ammo-loaded">30</span>/<span id="ammo-reserve">120</span>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <button id="shoot-btn" class="hud-element">FIRE</button>
+        <button id="aim-btn" class="hud-element">AIM</button>
+        <button id="ability-btn" class="hud-element">SKILL</button>
+    </div>
+
+    <!-- Shop Menu Overlay -->
+    <div id="shop-menu">
+        <div style="color: #00ff00; font-size: 32px; font-weight: bold;">⚔️ WEAPON SHOP</div>
+        <div class="shop-grid" id="shop-items"></div>
+        <button id="close-shop-btn" class="mt-8 px-6 py-3 bg-red-600 hover:bg-red-700 rounded text-white font-bold">
+            CLOSE (ESC)
+        </button>
+    </div>
+
+    <!-- Main Game Script -->
+    <script>
+        // ========== GAME CONFIGURATION ==========
+        const CONFIG = {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            pixelRatio: Math.min(window.devicePixelRatio, 1.5),
+            fov: 75,
+            near: 0.1,
+            far: 1000,
+            targetFPS: 60,
+        };
+
+        // ========== THREE.JS INITIALIZATION ==========
+        let scene, camera, renderer, controls;
+        let gameState = {
+            isAlive: true,
+            health: 100,
+            maxHealth: 100,
+            armor: 0,
+            maxArmor: 100,
+            credits: 800,
+            weapons: [],
+            currentWeaponIndex: 0,
+            isAiming: false,
+            isShooting: false,
+            isShopOpen: false,
+            touchMovement: { x: 0, y: 0 },
+            touchLook: { x: 0, y: 0 },
+        };
+
+        // Weapon Database
+        const WEAPONS = [
+            {
+                id: 'classic',
+                name: 'CLASSIC PISTOL',
+                damage: 25,
+                fireRate: 6.75,
+                recoil: 6,
+                spread: 5,
+                ammo: 30,
+                reserve: 120,
+                cost: 0,
+                owned: true,
+            },
+            {
+                id: 'vandal',
+                name: 'VANDAL',
+                damage: 40,
+                fireRate: 9.75,
+                recoil: 7.5,
+                spread: 2.5,
+                ammo: 25,
+                reserve: 75,
+                cost: 2400,
+                owned: false,
+            },
+            {
+                id: 'phantom',
+                name: 'PHANTOM',
+                damage: 39,
+                fireRate: 11,
+                recoil: 5,
+                spread: 3,
+                ammo: 30,
+                reserve: 90,
+                cost: 2550,
+                owned: false,
+            },
+            {
+                id: 'operator',
+                name: 'OPERATOR',
+                damage: 150,
+                fireRate: 0.6,
+                recoil: 8,
+                spread: 0.5,
+                ammo: 5,
+                reserve: 25,
+                cost: 4700,
+                owned: false,
+            },
+        ];
+
+        function initThreeJS() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1f3a);
+            scene.fog = new THREE.Fog(0x1a1f3a, 500, 1000);
+
+            // Camera Setup
+            camera = new THREE.PerspectiveCamera(CONFIG.fov, CONFIG.width / CONFIG.height, CONFIG.near, CONFIG.far);
+            camera.position.set(0, 1.6, 10);
+
+            // Renderer Setup
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: document.getElementById('gameCanvas'),
+                antialias: true,
+                alpha: true,
+            });
+            renderer.setSize(CONFIG.width, CONFIG.height);
+            renderer.setPixelRatio(CONFIG.pixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+            // Pointer Lock Controls
+            controls = new THREE.PointerLockControls(camera, document.body);
+            scene.add(controls.getObject());
+
+            // Lighting
+            setupLighting();
+
+            // Map
+            createTestMap();
+
+            // Initialize Weapons
+            gameState.weapons = WEAPONS.map(w => ({...w}));
+
+            // Setup UI
+            updateHUD();
+
+            console.log('✅ Three.js initialized successfully');
+        }
+
+        function setupLighting() {
+            // Ambient Light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            // Directional Light (Sun)
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(50, 50, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.far = 500;
+            dirLight.shadow.camera.left = -100;
+            dirLight.shadow.camera.right = 100;
+            dirLight.shadow.camera.top = 100;
+            dirLight.shadow.camera.bottom = -100;
+            scene.add(dirLight);
+
+            // Hemisphere Light
+            const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x000000, 0.4);
+            scene.add(hemiLight);
+        }
+
+        function createTestMap() {
+            // Ground
+            const groundGeo = new THREE.PlaneGeometry(100, 100);
+            const groundMat = new THREE.MeshStandardMaterial({ 
+                color: 0x2a4a3a,
+                roughness: 0.8,
+                metalness: 0.1,
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // A Site Building
+            addBuilding(new THREE.Vector3(-20, 0, -30), new THREE.Vector3(15, 8, 15), 0x4a5a8a);
+
+            // B Site Building
+            addBuilding(new THREE.Vector3(20, 0, -30), new THREE.Vector3(15, 8, 15), 0x4a5a8a);
+
+            // Mid Wall
+            addBuilding(new THREE.Vector3(0, 0, 0), new THREE.Vector3(3, 6, 30), 0x3a4a6a);
+
+            // Wall
+            addBuilding(new THREE.Vector3(-40, 0, 10), new THREE.Vector3(3, 6, 20), 0x3a4a6a);
+
+            // Lighting objects
+            const lightBox = new THREE.BoxGeometry(5, 5, 5);
+            const lightMat = new THREE.MeshBasicMaterial({ color: 0xffff99 });
+            const light = new THREE.Mesh(lightBox, lightMat);
+            light.position.set(0, 15, -30);
+            scene.add(light);
+        }
+
+        function addBuilding(position, size, color) {
+            const geo = new THREE.BoxGeometry(...size);
+            const mat = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.7,
+                metalness: 0.1,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(position);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+        }
+
+        function setupTouchControls() {
+            // Left Joystick - Movement
+            const leftJoystick = nipplejs.create({
+                zone: document.getElementById('hud-container'),
+                mode: 'static',
+                position: { left: '80px', bottom: '80px' },
+                color: '#00ff00',
+                size: 100,
+                multitouch: true,
+                maxNumberOfNipples: 2,
+                restOpacity: 0.5,
+                dataOnly: false,
+            });
+
+            leftJoystick.on('move', (e, data) => {
+                gameState.touchMovement = {
+                    x: Math.cos(data.angle.radian),
+                    y: Math.sin(data.angle.radian),
+                };
+            });
+
+            leftJoystick.on('end', () => {
+                gameState.touchMovement = { x: 0, y: 0 };
+            });
+
+            // Right Joystick - Look Around
+            const rightJoystick = nipplejs.create({
+                zone: document.getElementById('hud-container'),
+                mode: 'static',
+                position: { right: '80px', bottom: '80px' },
+                color: '#ff6400',
+                size: 100,
+                multitouch: true,
+                maxNumberOfNipples: 2,
+                restOpacity: 0.5,
+            });
+
+            rightJoystick.on('move', (e, data) => {
+                gameState.touchLook = {
+                    x: data.vector.x * 0.005,
+                    y: data.vector.y * 0.005,
+                };
+            });
+
+            rightJoystick.on('end', () => {
+                gameState.touchLook = { x: 0, y: 0 };
+            });
+
+            console.log('✅ Touch controls initialized');
+        }
+
+        function setupUI() {
+            // Shop Button
+            document.getElementById('open-shop-btn').addEventListener('click', () => {
+                gameState.isShopOpen = true;
+                document.getElementById('shop-menu').style.display = 'flex';
+                populateShop();
+            });
+
+            document.getElementById('close-shop-btn').addEventListener('click', closeShop);
+
+            // Shoot Button
+            document.getElementById('shoot-btn').addEventListener('mousedown', () => {
+                gameState.isShooting = true;
+            });
+            document.getElementById('shoot-btn').addEventListener('mouseup', () => {
+                gameState.isShooting = false;
+            });
+            document.getElementById('shoot-btn').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                gameState.isShooting = true;
+            });
+            document.getElementById('shoot-btn').addEventListener('touchend', (e) => {
+                e.preventDefault();
+                gameState.isShooting = false;
+            });
+
+            // Aim Button
+            document.getElementById('aim-btn').addEventListener('mousedown', () => {
+                gameState.isAiming = true;
+            });
+            document.getElementById('aim-btn').addEventListener('mouseup', () => {
+                gameState.isAiming = false;
+            });
+
+            // ESC to close shop
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeShop();
+                if (e.key === 'Enter') controls.lock();
+            });
+
+            // Click to lock pointer
+            document.addEventListener('click', () => {
+                if (!gameState.isShopOpen) {
+                    controls.lock();
+                }
+            });
+        }
+
+        function populateShop() {
+            const shopContainer = document.getElementById('shop-items');
+            shopContainer.innerHTML = '';
+
+            gameState.weapons.forEach((weapon, idx) => {
+                const card = document.createElement('div');
+                card.className = 'weapon-card' + (weapon.owned ? '' : ' locked');
+                card.innerHTML = `
+                    <div style="font-weight: bold;">${weapon.name}</div>
+                    <div style="font-size: 12px; margin-top: 5px;">💰 ${weapon.cost}</div>
+                    ${!weapon.owned && gameState.credits >= weapon.cost ? `
+                        <button style="margin-top: 8px; padding: 5px 10px; background: #00ff00; color: #000; border: none; border-radius: 3px; cursor: pointer; font-weight: bold;">BUY</button>
+                    ` : ''}
+                `;
+
+                if (!weapon.owned && gameState.credits >= weapon.cost) {
+                    card.querySelector('button').addEventListener('click', () => {
+                        gameState.credits -= weapon.cost;
+                        gameState.weapons[idx].owned = true;
+                        populateShop();
+                        updateHUD();
+                    });
+                }
+
+                shopContainer.appendChild(card);
+            });
+        }
+
+        function closeShop() {
+            gameState.isShopOpen = false;
+            document.getElementById('shop-menu').style.display = 'none';
+        }
+
+        function updateHUD() {
+            // Health
+            const healthPercent = (gameState.health / gameState.maxHealth) * 100;
+            document.getElementById('health-fill').style.width = healthPercent + '%';
+            document.getElementById('health-text').textContent = gameState.health;
+
+            // Armor
+            const armorPercent = (gameState.armor / gameState.maxArmor) * 100;
+            document.getElementById('armor-fill').style.width = armorPercent + '%';
+            document.getElementById('armor-text').textContent = gameState.armor;
+
+            // Credits
+            document.getElementById('credits-display').textContent = gameState.credits;
+
+            // Weapon
+            const currentWeapon = gameState.weapons[gameState.currentWeaponIndex];
+            document.getElementById('weapon-name').textContent = currentWeapon.name;
+            document.getElementById('ammo-loaded').textContent = currentWeapon.ammo;
+            document.getElementById('ammo-reserve').textContent = currentWeapon.reserve;
+        }
+
+        function handlePlayerMovement(deltaTime) {
+            const speed = 15;
+            const velocity = new THREE.Vector3();
+
+            // Keyboard controls
+            const keys = { w: false, a: false, s: false, d: false };
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'w') keys.w = true;
+                if (e.key === 'a') keys.a = true;
+                if (e.key === 's') keys.s = true;
+                if (e.key === 'd') keys.d = true;
+            });
+            document.addEventListener('keyup', (e) => {
+                if (e.key === 'w') keys.w = false;
+                if (e.key === 'a') keys.a = false;
+                if (e.key === 's') keys.s = false;
+                if (e.key === 'd') keys.d = false;
+            });
+
+            if (keys.w) {
+                velocity.z -= speed * deltaTime;
+            }
+            if (keys.s) {
+                velocity.z += speed * deltaTime;
+            }
+            if (keys.a) {
+                velocity.x -= speed * deltaTime;
+            }
+            if (keys.d) {
+                velocity.x += speed * deltaTime;
+            }
+
+            // Touch controls
+            if (gameState.touchMovement.x !== 0 || gameState.touchMovement.y !== 0) {
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                forward.y = 0;
+                forward.normalize();
+
+                const right = new THREE.Vector3();
+                right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+                velocity.addScaledVector(forward, gameState.touchMovement.y * speed * deltaTime);
+                velocity.addScaledVector(right, gameState.touchMovement.x * speed * deltaTime);
+            }
+
+            // Apply velocity
+            if (velocity.length() > 0) {
+                camera.position.add(velocity);
+            }
+
+            // Touch look
+            if (gameState.touchLook.x !== 0 || gameState.touchLook.y !== 0) {
+                const euler = new THREE.Euler(0, 'YXZ');
+                euler.setFromQuaternion(camera.quaternion);
+                euler.rotateY(-gameState.touchLook.x);
+                euler.rotateX(-gameState.touchLook.y);
+                camera.quaternion.setFromEuler(euler);
+            }
+        }
+
+        let lastTime = Date.now();
+        let frameCount = 0;
+        let fpsDisplay = 0;
+
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+
+            const now = Date.now();
+            const deltaTime = (now - lastTime) / 1000;
+            lastTime = now;
+
+            // Update player movement
+            handlePlayerMovement(deltaTime);
+
+            // Shooting
+            if (gameState.isShooting && gameState.weapons[gameState.currentWeaponIndex].ammo > 0) {
+                const weapon = gameState.weapons[gameState.currentWeaponIndex];
+                weapon.ammo--;
+                updateHUD();
+                
+                // Raycasting for hit detection
+                const raycaster = new THREE.Raycaster(camera.position, camera.getWorldDirection(new THREE.Vector3()));
+                const intersects = raycaster.intersectObjects(scene.children);
+                
+                if (intersects.length > 0) {
+                    // Hit effect here
+                    console.log('🎯 HIT!');
+                }
+            }
+
+            // FPS Counter
+            frameCount++;
+            if (now - (lastTime || now) > 1000) {
+                fpsDisplay = frameCount;
+                frameCount = 0;
+                document.getElementById('fps-counter').textContent = `FPS: ${fpsDisplay} | PING: ${Math.random() * 50 | 0}ms`;
+            }
+
+            // Render
+            renderer.render(scene, camera);
+        }
+
+        // ========== INITIALIZATION ==========
+        window.addEventListener('load', () => {
+            initThreeJS();
+            setupLighting();
+            setupTouchControls();
+            setupUI();
+            gameLoop();
+        });
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            CONFIG.width = window.innerWidth;
+            CONFIG.height = window.innerHeight;
+            camera.aspect = CONFIG.width / CONFIG.height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(CONFIG.width, CONFIG.height);
+        });
+    </script>
+</body>
+</html>
