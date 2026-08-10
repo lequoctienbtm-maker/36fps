@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>⚔️ VALORANT FPS - WebGL</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@r128/examples/js/controls/PointerLockControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@r128/examples/js/loaders/GLTFLoader.js"></script>
+    
+    <!-- NippleJS -->
+    <script src="https://yoannimmo.github.io/nipplejs/nipplejs.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: #0a0e27;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* HUD Container */
+        #hud-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+            z-index: 10;
+        }
+
+        .hud-element {
+            pointer-events: auto;
+            user-select: none;
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            border: 2px solid #00ff00;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
+            z-index: 20;
+            transition: all 0.1s;
+        }
+
+        /* HUD Panels */
+        #health-bar {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 220px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            padding: 15px;
+            font-size: 14px;
+            z-index: 15;
+        }
+
+        .health-value {
+            width: 100%;
+            height: 22px;
+            background: #001a00;
+            border-radius: 3px;
+            margin: 8px 0;
+            overflow: hidden;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #00aa00);
+            width: 100%;
+            transition: width 0.2s;
+        }
+
+        .armor-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00aaff, #0055ff);
+        }
+
+        #weapon-info {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            text-align: right;
+            font-size: 18px;
+            color: #00ff00;
+            z-index: 15;
+        }
+
+        .ammo-counter {
+            font-size: 42px;
+            font-weight: bold;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+        }
+
+        #fps-counter {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #00ff00;
+            font-family: monospace;
+            z-index: 15;
+        }
+
+        /* Control Buttons */
+        #shoot-btn, #aim-btn, #ability-btn {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(0, 255, 0, 0.15);
+            border: 2px solid #00ff00;
+            color: #00ff00;
+            font-weight: bold;
+            font-size: 11px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            transition: all 0.1s;
+            z-index: 100;
+            pointer-events: auto;
+        }
+
+        #shoot-btn:active {
+            background: rgba(255, 0, 0, 0.3);
+            border-color: #ff0000;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.6);
+        }
+
+        #aim-btn:active {
+            background: rgba(0, 150, 255, 0.3);
+            border-color: #0096ff;
+        }
+
+        #ability-btn:active {
+            background: rgba(255, 100, 0, 0.3);
+            border-color: #ff6400;
+        }
+
+        #shoot-btn { bottom: 40px; right: 40px; }
+        #aim-btn { bottom: 40px; right: 130px; }
+        #ability-btn { bottom: 130px; right: 40px; }
+
+        /* Shop Menu */
+        #shop-menu {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.98);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            overflow-y: auto;
+        }
+
+        #shop-menu.active {
+            display: flex;
+        }
+
+        .shop-title {
+            color: #00ff00;
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
+        }
+
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 15px;
+            width: 95%;
+            max-width: 700px;
+            margin: 20px 0;
+        }
+
+        .weapon-card {
+            background: rgba(0, 255, 0, 0.08);
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #00ff00;
+            font-size: 13px;
+        }
+
+        .weapon-card:hover:not(.owned) {
+            background: rgba(0, 255, 0, 0.15);
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+            transform: scale(1.05);
+        }
+
+        .weapon-card.owned {
+            opacity: 0.7;
+            border-color: #0055ff;
+        }
+
+        .buy-btn {
+            margin-top: 8px;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #00ff00, #00aa00);
+            color: #000;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .buy-btn:hover {
+            background: linear-gradient(135deg, #00ff00, #00ff00);
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        }
+
+        #close-shop-btn {
+            margin-top: 20px;
+            padding: 12px 25px;
+            background: linear-gradient(135deg, #ff0000, #aa0000);
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        #close-shop-btn:hover {
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.6);
+        }
+
+        /* Buy Phase UI */
+        #buy-phase {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #00ff00;
+            padding: 15px 25px;
+            border-radius: 5px;
+            text-align: center;
+            color: #00ff00;
+            min-width: 200px;
+            z-index: 15;
+            display: none;
+        }
+
+        #buy-phase.active {
+            display: block;
+        }
+
+        .credit-display {
+            font-size: 22px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        /* Nipple JS Styling */
+        .nipple {
+            pointer-events: auto !important;
+            z-index: 50;
+        }
+
+        /* Animations */
+        @keyframes float-up {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(0.8); opacity: 0; }
+        }
+
+        .damage-notification {
+            animation: float-up 1s ease-out forwards;
+        }
+
+        @media (max-width: 600px) {
+            #health-bar, #weapon-info {
+                font-size: 12px;
+            }
+
+            .ammo-counter {
+                font-size: 28px;
+            }
+
+            #shoot-btn, #aim-btn, #ability-btn {
+                width: 60px;
+                height: 60px;
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 3D Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD Container -->
+    <div id="hud-container">
+        <!-- Crosshair -->
+        <div id="crosshair"></div>
+
+        <!-- FPS Counter -->
+        <div id="fps-counter">FPS: 0</div>
+
+        <!-- Buy Phase Panel -->
+        <div id="buy-phase" class="active">
+            <div>💳 BUY PHASE</div>
+            <div class="credit-display">💰 <span id="credits-display">800</span></div>
+            <button id="open-shop-btn" style="
+                margin-top: 10px;
+                padding: 8px 16px;
+                background: linear-gradient(135deg, #00ff00, #00aa00);
+                color: #000;
+                border: none;
+                border-radius: 3px;
+                cursor: pointer;
+                font-weight: bold;
+                font-size: 13px;
+            ">OPEN SHOP</button>
+        </div>
+
+        <!-- Health & Armor -->
+        <div id="health-bar">
+            <div>❤️ HP: <span id="health-text">100</span>/100</div>
+            <div class="health-value">
+                <div class="health-fill" id="health-fill" style="width: 100%;"></div>
+            </div>
+            <div style="margin-top: 10px;">🛡️ ARMOR: <span id="armor-text">0</span>/100</div>
+            <div class="health-value">
+                <div class="armor-fill" id="armor-fill" style="width: 0%;"></div>
+            </div>
+        </div>
+
+        <!-- Weapon Info -->
+        <div id="weapon-info">
+            <div id="weapon-name">🔫 CLASSIC</div>
+            <div class="ammo-counter">
+                <span id="ammo-loaded">30</span>/<span id="ammo-reserve">120</span>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <button id="shoot-btn" class="hud-element" title="Fire">FIRE</button>
+        <button id="aim-btn" class="hud-element" title="Aim Down Sights">AIM</button>
+        <button id="ability-btn" class="hud-element" title="Use Ability">SKILL</button>
+    </div>
+
+    <!-- Shop Menu -->
+    <div id="shop-menu">
+        <div class="shop-title">⚔️ WEAPON SHOP</div>
+        <div style="color: #00aa00; font-size: 14px; margin-bottom: 10px;">
+            💰 CREDITS: <span id="shop-credits-display">800</span>
+        </div>
+        <div class="shop-grid" id="shop-items"></div>
+        <button id="close-shop-btn">CLOSE SHOP (ESC)</button>
+    </div>
+
+    <!-- Main Game Script -->
+    <script type="module">
+        // ========== GAME INITIALIZATION ==========
+        
+        // Import modules
+        class GameScene {
+            constructor(canvas) {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1a1f3a);
+                this.scene.fog = new THREE.Fog(0x1a1f3a, 500, 1000);
+
+                this.camera = new THREE.PerspectiveCamera(
+                    75,
+                    window.innerWidth / window.innerHeight,
+                    0.1,
+                    1000
+                );
+                this.camera.position.set(0, 1.6, 10);
+
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: canvas,
+                    antialias: true,
+                    powerPreference: 'high-performance',
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+                this.renderer.shadowMap.enabled = true;
+
+                this.controls = new THREE.PointerLockControls(this.camera, document.body);
+                this.scene.add(this.controls.getObject());
+
+                this.setupLighting();
+                this.createMap();
+            }
+
+            setupLighting() {
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                this.scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+                dirLight.position.set(60, 60, 60);
+                dirLight.castShadow = true;
+                dirLight.shadow.mapSize.width = 2048;
+                dirLight.shadow.mapSize.height = 2048;
+                dirLight.shadow.camera.far = 500;
+                dirLight.shadow.camera.left = -150;
+                dirLight.shadow.camera.right = 150;
+                dirLight.shadow.camera.top = 150;
+                dirLight.shadow.camera.bottom = -150;
+                this.scene.add(dirLight);
+
+                const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x1a1f3a, 0.4);
+                this.scene.add(hemiLight);
+            }
+
+            createMap() {
+                // Ground
+                const groundGeo = new THREE.PlaneGeometry(200, 200);
+                const groundMat = new THREE.MeshStandardMaterial({
+                    color: 0x2a4a3a,
+                    roughness: 0.8,
+                });
+                const ground = new THREE.Mesh(groundGeo, groundMat);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                this.scene.add(ground);
+
+                // A Site
+                this.addBuilding(new THREE.Vector3(-25, 0, -40), new THREE.Vector3(20, 10, 20), 0x4a5a8a);
+
+                // B Site
+                this.addBuilding(new THREE.Vector3(25, 0, -40), new THREE.Vector3(20, 10, 20), 0x4a5a8a);
+
+                // Mid
+                this.addBuilding(new THREE.Vector3(0, 0, -5), new THREE.Vector3(5, 8, 30), 0x3a4a6a);
+            }
+
+            addBuilding(pos, size, color) {
+                const geo = new THREE.BoxGeometry(...size);
+                const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.copy(pos);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                this.scene.add(mesh);
+            }
+
+            render() {
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // ========== GAME STATE ==========
+        const gameState = {
+            isRunning: true,
+            health: 100,
+            maxHealth: 100,
+            armor: 0,
+            maxArmor: 100,
+            credits: 800,
+            currentWeapon: 0,
+            weapons: [
+                { id: 'classic', name: '🔫 CLASSIC', damage: 25, ammo: 30, reserve: 120, cost: 0 },
+                { id: 'vandal', name: '⚔️ VANDAL', damage: 40, ammo: 25, reserve: 75, cost: 2400 },
+                { id: 'phantom', name: '🔥 PHANTOM', damage: 39, ammo: 30, reserve: 90, cost: 2550 },
+                { id: 'operator', name: '🎯 OPERATOR', damage: 150, ammo: 5, reserve: 25, cost: 4700 },
+            ],
+            isAiming: false,
+            isShooting: false,
+            isShopOpen: false,
+        };
+
+        // ========== INITIALIZATION ==========
+        const gameScene = new GameScene(document.getElementById('gameCanvas'));
+        let lastFrameTime = Date.now();
+        let frameCount = 0;
+        let fps = 0;
+
+        // Touch Controls
+        const keyState = { w: false, a: false, s: false, d: false };
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'w') keyState.w = true;
+            if (e.key.toLowerCase() === 'a') keyState.a = true;
+            if (e.key.toLowerCase() === 's') keyState.s = true;
+            if (e.key.toLowerCase() === 'd') keyState.d = true;
+            if (e.key === 'Escape') closeShop();
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key.toLowerCase() === 'w') keyState.w = false;
+            if (e.key.toLowerCase() === 'a') keyState.a = false;
+            if (e.key.toLowerCase() === 's') keyState.s = false;
+            if (e.key.toLowerCase() === 'd') keyState.d = false;
+        });
+
+        // UI Functions
+        function updateHUD() {
+            const healthPercent = (gameState.health / gameState.maxHealth) * 100;
+            document.getElementById('health-fill').style.width = healthPercent + '%';
+            document.getElementById('health-text').textContent = Math.floor(gameState.health);
+
+            const armorPercent = (gameState.armor / gameState.maxArmor) * 100;
+            document.getElementById('armor-fill').style.width = armorPercent + '%';
+            document.getElementById('armor-text').textContent = Math.floor(gameState.armor);
+
+            const weapon = gameState.weapons[gameState.currentWeapon];
+            document.getElementById('weapon-name').textContent = weapon.name;
+            document.getElementById('ammo-loaded').textContent = weapon.ammo;
+            document.getElementById('ammo-reserve').textContent = weapon.reserve;
+            document.getElementById('credits-display').textContent = gameState.credits;
+        }
+
+        function openShop() {
+            gameState.isShopOpen = true;
+            document.getElementById('shop-menu').classList.add('active');
+            populateShop();
+        }
+
+        function closeShop() {
+            gameState.isShopOpen = false;
+            document.getElementById('shop-menu').classList.remove('active');
+        }
+
+        function populateShop() {
+            const container = document.getElementById('shop-items');
+            container.innerHTML = '';
+
+            gameState.weapons.forEach((weapon, idx) => {
+                const card = document.createElement('div');
+                card.className = 'weapon-card';
+                card.innerHTML = `
+                    <div style="font-weight: bold;">${weapon.name}</div>
+                    <div style="font-size: 12px; margin-top: 5px;">💰 ${weapon.cost}</div>
+                    ${weapon.cost <= gameState.credits ? `
+                        <button class="buy-btn">BUY</button>
+                    ` : `<div style="color: #ff0000; font-size: 11px; margin-top: 5px;">NOT ENOUGH</div>`}
+                `;
+
+                if (weapon.cost <= gameState.credits) {
+                    card.querySelector('.buy-btn').addEventListener('click', () => {
+                        if (gameState.credits >= weapon.cost) {
+                            gameState.credits -= weapon.cost;
+                            updateHUD();
+                            populateShop();
+                        }
+                    });
+                }
+
+                container.appendChild(card);
+            });
+        }
+
+        // Button Events
+        document.getElementById('open-shop-btn').addEventListener('click', openShop);
+        document.getElementById('close-shop-btn').addEventListener('click', closeShop);
+
+        document.getElementById('shoot-btn').addEventListener('mousedown', () => { gameState.isShooting = true; });
+        document.getElementById('shoot-btn').addEventListener('mouseup', () => { gameState.isShooting = false; });
+        document.getElementById('aim-btn').addEventListener('mousedown', () => { gameState.isAiming = true; });
+        document.getElementById('aim-btn').addEventListener('mouseup', () => { gameState.isAiming = false; });
+
+        document.addEventListener('click', () => {
+            if (!gameState.isShopOpen) gameScene.controls.lock();
+        });
+
+        // Player Movement
+        function updatePlayerMovement(deltaTime) {
+            const speed = 15;
+            const forward = new THREE.Vector3();
+            gameScene.camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+
+            const right = new THREE.Vector3();
+            right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+            if (keyState.w) gameScene.camera.position.addScaledVector(forward, speed * deltaTime);
+            if (keyState.s) gameScene.camera.position.addScaledVector(forward, -speed * deltaTime);
+            if (keyState.a) gameScene.camera.position.addScaledVector(right, -speed * deltaTime);
+            if (keyState.d) gameScene.camera.position.addScaledVector(right, speed * deltaTime);
+        }
+
+        // Game Loop
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+
+            const now = Date.now();
+            const deltaTime = (now - lastFrameTime) / 1000;
+            lastFrameTime = now;
+
+            // Update
+            updatePlayerMovement(deltaTime);
+            updateHUD();
+
+            // FPS Counter
+            frameCount++;
+            if (frameCount % 10 === 0) {
+                fps = Math.round(1 / deltaTime);
+                document.getElementById('fps-counter').textContent = `FPS: ${fps}`;
+            }
+
+            // Render
+            gameScene.render();
+        }
+
+        // Start
+        window.addEventListener('resize', () => {
+            gameScene.camera.aspect = window.innerWidth / window.innerHeight;
+            gameScene.camera.updateProjectionMatrix();
+            gameScene.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        updateHUD();
+        gameLoop();
+    </script>
+</body>
+</html>
